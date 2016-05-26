@@ -1,17 +1,22 @@
-module.exports = function( grunt ) {
+module.exports = function (grunt) {
   "use strict";
 
   require("load-grunt-tasks")(grunt);
 
-  var banner = "/*PerfCascade build:<%= grunt.template.today(\"dd/mm/yyyy\") %> */\n";
+  /** Version banner for static files (keep version format for "grunt-bump") */
+  var banner = "/*! github.com/micmro/PerfCascade Version:<%= pkg.version %> <%= grunt.template.today(\"(dd/mm/yyyy)\") %> */\n";
 
   grunt.initConfig({
-    clean : {
+    pkg: grunt.file.readJSON('package.json'),
+    clean: {
       dist: ["temp/", "src/dist/"],
       pages: ["gh-pages/"],
       js: ["src/ts/**/*.js", "src/ts/**/*.js.map"]
     },
     concat: {
+      options: {
+        banner: banner
+      },
       dist: {
         src: ["src/css-raw/normalize.css", "src/css-raw/page.css", "src/css-raw/main.css"],
         dest: "src/dist/perf-cascade-full.css",
@@ -20,12 +25,15 @@ module.exports = function( grunt ) {
         src: ["src/css-raw/normalize.css", "src/css-raw/gh-page.css", "src/css-raw/main.css"],
         dest: "src/dist/perf-cascade-gh-page.css",
       }
-      
+
     },
     browserify: {
       options: {
         plugin: [['tsify']],
-        banner: banner
+        banner: banner,
+        browserifyOptions: {
+          standalone: "perfCascade"
+        }
       },
       dist: {
         files: {
@@ -34,17 +42,16 @@ module.exports = function( grunt ) {
       }
     },
     tslint: {
-        options: {
-            // can be a configuration object or a filepath to tslint.json 
-            configuration: "tslint.json"
-        },
-        files: {
-            src: [
-                "src/ts/**/*.ts"
-            ]
-        }
+      options: {
+        configuration: "tslint.json"
+      },
+      files: {
+        src: [
+          "src/ts/**/*.ts"
+        ]
+      }
     },
-    uglify : {
+    uglify: {
       options: {
         compress: {
           global_defs: {
@@ -61,9 +68,17 @@ module.exports = function( grunt ) {
       }
     },
     watch: {
-      babel: {
+      ts: {
         files: ["src/ts/**/*.ts", "Gruntfile.js"],
         tasks: ["distBase"],
+        options: {
+          spawn: false,
+          interrupt: true
+        },
+      },
+      css: {
+        files: ["src/css-raw/**/*.css"],
+        tasks: ["concat:dist"],
         options: {
           spawn: false,
           interrupt: true
@@ -82,15 +97,45 @@ module.exports = function( grunt ) {
     "gh-pages": {
       options: {
         base: "gh-pages",
-        add: true
+        add: true,
+        // tag: '<%= pkg.version %>'
       },
       src: ["**/*"]
     },
+    bump: {
+      //to test run: grunt bump --dry-run
+      options :{
+        files: [
+            "package.json",
+            "src/dist/perf-cascade.js",
+            "src/dist/perf-cascade.min.js",
+            "src/dist/perf-cascade-full.css"
+        ],
+        updateConfigs: ['pkg'],
+        commit: true,
+        push: true,
+        createTag: true,
+        // dryRun: true,
+        commitFiles: [
+            "package.json",
+            "src/dist/perf-cascade.js",
+            "src/dist/perf-cascade.min.js",
+            "src/dist/perf-cascade-full.css"
+        ],
+      }
+    }
   });
 
   grunt.registerTask("distBase", ["clean:dist", "browserify:dist", "concat:dist"]);
-  grunt.registerTask("dist", ["tslint", "distBase", "uglify:dist"]);
-  grunt.registerTask("ghPages", ["clean:pages", "dist", "concat:pages", "copy:pages", "gh-pages"]);
+
+  //build uptimized release file
+  grunt.registerTask("releaseBuild", ["tslint", "distBase", "uglify:dist"]);
+
+  //releases the current version on master to github-pages (gh-pages branch)
+  grunt.registerTask("ghPages", ["clean:pages", "releaseBuild", "concat:pages", "copy:pages", "gh-pages"]);
+
+  //releases master and gh-pages at the same time (with auto-version bump)
+  grunt.registerTask("release", ["clean:pages", "releaseBuild", "bump", "concat:pages", "copy:pages", "gh-pages"]);
 
   grunt.registerTask("default", ["distBase", "watch"]);
 };
